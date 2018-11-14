@@ -15,10 +15,6 @@ import io.reactivex.subjects.BehaviorSubject
 import java.util.concurrent.TimeUnit
 
 
-/**
- * A simple [Fragment] subclass.
- *
- */
 class SplashFragment : Fragment() {
 
 
