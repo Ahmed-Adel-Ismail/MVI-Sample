@@ -1,4 +1,4 @@
-package com.mvi.features
+package com.mvi.presentation.features
 
 
 import android.os.Bundle
@@ -9,8 +9,8 @@ import android.view.ViewGroup
 import androidx.navigation.fragment.findNavController
 import com.android.LiteCycle
 import com.mvi.R
-import io.reactivex.Completable
 import io.reactivex.Observable
+import io.reactivex.disposables.Disposable
 import io.reactivex.subjects.BehaviorSubject
 import java.util.concurrent.TimeUnit
 
@@ -28,36 +28,29 @@ class SplashFragment : Fragment() {
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         super.onActivityCreated(savedInstanceState)
-        LiteCycle.with(false)
+        LiteCycle.with(integration())
             .forLifeCycle(this)
-            .onStartUpdate { true }
-            .onStopUpdate { false }
-            .observe(BehaviorSubject.create())
-            .let(::intent)
-            .subscribe { view(it) }
-            .disposeWithLifecycle(this)
+            .onDestroyInvoke(Disposable::dispose)
+            .observe()
     }
 
+    private fun integration() = intent(fragmentStartedObservable()).subscribe { view(it) }
+
+    private fun fragmentStartedObservable() = LiteCycle.with(false)
+        .forLifeCycle(this)
+        .onStartUpdate { true }
+        .onStopUpdate { false }
+        .observe(BehaviorSubject.create())
 
 }
 
 
-fun intent(canFinish: Observable<Boolean>): Observable<Boolean> {
-    return canFinish.switchMap {
-        return@switchMap if (it) {
-            Observable.just(true).delay(2, TimeUnit.SECONDS)
-        } else {
-            Observable.just(false)
-        }
-    }
-}
+fun intent(fragmentStartedObservable: Observable<Boolean>) = fragmentStartedObservable
+    .switchMap { Observable.just(it).delay(2, TimeUnit.SECONDS) }!!
 
 
-fun SplashFragment.view(finished: Boolean) {
-    if (finished) {
-        with(findNavController()){
-            navigate(R.id.action_splashFragment_to_loginFragment)
-        }
+fun SplashFragment.view(finished: Boolean) = findNavController()
+    .takeIf { finished }
+    ?.apply { navigate(R.id.action_splashFragment_to_loginFragment) }
 
-    }
-}
+
