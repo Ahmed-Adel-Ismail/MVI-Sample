@@ -16,6 +16,7 @@ import com.mvi.presentation.asString
 import io.reactivex.Observable
 import io.reactivex.Scheduler
 import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.disposables.Disposable
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
@@ -32,79 +33,104 @@ class LoginFragment : Fragment() {
         super.onActivityCreated(savedInstanceState)
         LiteCycle.with(integration())
             .forLifeCycle(this)
-            .onDestroyInvoke(Disposable::dispose)
+            .onDestroyInvoke(CompositeDisposable::clear)
             .observe()
     }
 
-    private fun integration() = LoginViewState()
-        .let(::Initialize)
-        .let { BehaviorSubject.createDefault<LoginAction>(it) }
-        .let { IntentData(it) }
-        .let { intent(it).subscribe { state -> view(it.actions, state) } }
-
+    private fun integration() = with(IntentData()) {
+        intent(this)
+            .subscribe { viewState -> view(actions, viewState) }
+            .also { disposable -> disposables.add(disposable) }
+            .let { disposables }
+    }
 }
 
-fun intent(data: IntentData): Observable<LoginViewState> = data.actions
-    .subscribeOn(data.backgroundScheduler)
-    .observeOn(data.backgroundScheduler)
-    .switchMap { handleIntent(it, data.loginRequest) }
-    .observeOn(data.mainScheduler)!!
+fun intent(data: IntentData) = with(data) {
+    BehaviorSubject.createDefault(LoginViewState()).apply {
+        actions
+            .share()
+            .subscribe { handleIntent(it, this@with) }
+            .also { disposables.add(it) }
+    }
+}
 
 
-private fun handleIntent(action: LoginAction, loginRequest: (String?, String?) -> Observable<User>) =
+private fun handleIntent(action: LoginAction, data: IntentData) {
     when (action) {
-        is Initialize -> Observable.just(LoginViewState(initialize = true))
-        is LoginRequest -> processLoginRequest(loginRequest, action)
+        is Initialize -> Observable.just(LoginViewState())
+        is LoginRequest -> processLoginRequest(data, action)
 
     }
+}
 
-private fun processLoginRequest(loginRequest: (String?, String?) -> Observable<User>, action: LoginRequest) =
-    loginRequest(action.state.userName, action.state.password)
+private fun processLoginRequest(data: IntentData, action: LoginRequest) = with(data) {
+    viewStates.onNext(LoginViewState(progressing = true))
+    loginRequest(action.username, action.password)
+        .subscribeOn(backgroundScheduler)
+        .observeOn(backgroundScheduler)
+        .doFinally { viewStates.onNext(LoginViewState(progressing = false)) }
         .map { user -> LoginViewState(loginResponse = user) }
         .onErrorReturn { throwable -> LoginViewState(errorMessage = throwable.message) }
+        .observeOn(mainScheduler)
+        .subscribe(viewStates::onNext, viewStates::onError)
+        .also { data.disposables.add(it) }
 
+}
 
 fun LoginFragment.view(actions: BehaviorSubject<LoginAction>, viewState: LoginViewState) = with(viewState) {
-    login_progress.visibility = if (progressing) View.VISIBLE else View.INVISIBLE
     when {
-        initialize -> login_button.setOnClickListener { handleOnClick(this, actions) }
-        errorMessage != null -> Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
-        loginResponse != null -> findNavController().navigate(R.id.action_loginFragment_to_homeFragment)
+        progressing -> showLoadingView()
+        errorMessage != null -> showErrorView(this)
+        loginResponse != null -> navigateToNextScreen()
+        else -> showInitialView(actions)
     }
 }
 
-private fun LoginFragment.handleOnClick(state: LoginViewState, actions: BehaviorSubject<LoginAction>) = with(state) {
-    when {
-        progressing -> Toast.makeText(context, "please wait", Toast.LENGTH_SHORT).show()
-        loginResponse == null -> startLoginRequest(actions)
-        else -> Toast.makeText(context, "login success", Toast.LENGTH_SHORT).show()
+fun LoginFragment.showInitialView(actions: BehaviorSubject<LoginAction>) {
+    login_progress.visibility = View.GONE
+    login_button.setOnClickListener {
+        actions.onNext(
+            LoginRequest(
+                user_name_edit_text.asString(),
+                password_edit_text.asString()
+            )
+        )
     }
 }
 
-private fun LoginFragment.startLoginRequest(actions: BehaviorSubject<LoginAction>) {
+private fun LoginFragment.showLoadingView() {
     login_progress.visibility = View.VISIBLE
-    LoginViewState(userName = user_name_edit_text.asString(), password = password_edit_text.asString())
-        .let(::LoginRequest)
-        .also(actions::onNext)
+    login_button.setOnClickListener { Toast.makeText(context, "please wait", Toast.LENGTH_SHORT).show() }
+}
+
+private fun LoginFragment.showErrorView(loginViewState: LoginViewState) = with(loginViewState) {
+    login_progress.visibility = View.GONE
+    login_button.setOnClickListener { Toast.makeText(context, loginViewState.errorMessage, Toast.LENGTH_LONG).show() }
+}
+
+private fun LoginFragment.navigateToNextScreen() {
+    login_progress.visibility = View.GONE
+    login_button.setOnClickListener(null)
+    findNavController().navigate(R.id.action_loginFragment_to_homeFragment)
 }
 
 
 data class IntentData(
-    val actions: BehaviorSubject<LoginAction>,
+    val actions: BehaviorSubject<LoginAction> = BehaviorSubject.createDefault(Initialize()),
+    val viewStates: BehaviorSubject<LoginViewState> = BehaviorSubject.createDefault(LoginViewState()),
+    val disposables: CompositeDisposable = CompositeDisposable(),
     val loginRequest: ((String?, String?) -> Observable<User>) = ::login,
     val backgroundScheduler: Scheduler = Schedulers.io(),
     val mainScheduler: Scheduler = AndroidSchedulers.mainThread()
 )
 
+
 sealed class LoginAction
-data class Initialize(val state: LoginViewState) : LoginAction()
-data class LoginRequest(val state: LoginViewState) : LoginAction()
+data class Initialize(val progressing: Boolean = false) : LoginAction()
+data class LoginRequest(val username: String?, val password: String?) : LoginAction()
 
 data class LoginViewState(
-    val initialize: Boolean = false,
     val progressing: Boolean = false,
-    val userName: String? = null,
-    val password: String? = null,
     val errorMessage: String? = null,
     val loginResponse: User? = null
 )
