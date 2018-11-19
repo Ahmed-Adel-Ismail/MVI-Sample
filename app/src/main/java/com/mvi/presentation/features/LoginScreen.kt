@@ -17,7 +17,6 @@ import io.reactivex.Observable
 import io.reactivex.Scheduler
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
-import io.reactivex.disposables.Disposable
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
 import kotlinx.android.synthetic.main.fragment_login.*
@@ -39,6 +38,7 @@ class LoginFragment : Fragment() {
 
     private fun integration() = with(IntentData()) {
         intent(this)
+            .observeOn(mainScheduler)
             .subscribe { viewState -> view(actions, viewState) }
             .also { disposable -> disposables.add(disposable) }
             .let { disposables }
@@ -49,6 +49,7 @@ fun intent(data: IntentData) = with(data) {
     BehaviorSubject.createDefault(LoginViewState()).apply {
         actions
             .share()
+            .observeOn(backgroundScheduler)
             .subscribe { handleIntent(it, this@with) }
             .also { disposables.add(it) }
     }
@@ -71,7 +72,6 @@ private fun processLoginRequest(data: IntentData, action: LoginRequest) = with(d
         .observeOn(backgroundScheduler)
         .map { user -> LoginViewState(loginResponse = user) }
         .onErrorReturn { throwable -> LoginViewState(errorMessage = throwable.message) }
-        .observeOn(mainScheduler)
         .doOnNext { viewStates.onNext(LoginViewState(progressing = false)) }
         .subscribe(viewStates::onNext)
         .also { data.disposables.add(it) }
