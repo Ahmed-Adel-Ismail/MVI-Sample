@@ -9,7 +9,7 @@
         <action android:id="@+id/action_splashFragment_to_loginFragment" app:destination="@id/loginFragment"
                 app:popUpTo="@+id/main_navigation"/>
     </fragment>
-    <fragment android:id="@+id/loginFragment" android:name="com.mvi.presentation.features.LoginFragment" android:label="fragment_login"
+    <fragment android:id="@+id/loginFragment" android:name="com.mvi.presentation.features.login.LoginFragment" android:label="fragment_login"
               tools:layout="@layout/fragment_login">
         <action android:id="@+id/action_loginFragment_to_homeFragment" app:destination="@id/homeFragment"/>
     </fragment>
