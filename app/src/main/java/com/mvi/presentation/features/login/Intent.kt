@@ -7,7 +7,7 @@ fun intent(data: IntentData) = with(data) {
         .observeOn(backgroundScheduler)
         .subscribe { handleIntent(it, this@with) }
         .also { disposables.add(it) }
-    states
+        .let { states }
 }
 
 
@@ -15,7 +15,6 @@ private fun handleIntent(action: LoginAction, data: IntentData) {
     when (action) {
         is LoginInitializeAction -> Observable.just(LoginInProgressState(false))
         is LoginRequestAction -> processLoginRequest(data, action)
-
     }
 }
 

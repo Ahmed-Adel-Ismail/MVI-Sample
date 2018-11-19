@@ -56,12 +56,7 @@ private fun LoginFragment.showErrorViewAndEnableOnClick(errorMessage: String, ac
 
 
 private fun LoginFragment.requestLoginOnClick(actions: BehaviorSubject<LoginAction>) {
-    actions.onNext(
-        LoginRequestAction(
-            user_name_edit_text.asString(),
-            password_edit_text.asString()
-        )
-    )
+    actions.onNext(LoginRequestAction(user_name_edit_text.asString(), password_edit_text.asString()))
 }
 
 private fun LoginFragment.switchProgressAndOnClick(actions: BehaviorSubject<LoginAction>, progressing: Boolean) {
