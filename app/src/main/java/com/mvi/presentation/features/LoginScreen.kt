@@ -52,6 +52,7 @@ fun intent(data: IntentData) = with(data) {
             .subscribe { handleIntent(it, this@with) }
             .also { disposables.add(it) }
     }
+    viewStates
 }
 
 
@@ -68,11 +69,11 @@ private fun processLoginRequest(data: IntentData, action: LoginRequest) = with(d
     loginRequest(action.username, action.password)
         .subscribeOn(backgroundScheduler)
         .observeOn(backgroundScheduler)
-        .doFinally { viewStates.onNext(LoginViewState(progressing = false)) }
         .map { user -> LoginViewState(loginResponse = user) }
         .onErrorReturn { throwable -> LoginViewState(errorMessage = throwable.message) }
         .observeOn(mainScheduler)
-        .subscribe(viewStates::onNext, viewStates::onError)
+        .doOnNext { viewStates.onNext(LoginViewState(progressing = false)) }
+        .subscribe(viewStates::onNext)
         .also { data.disposables.add(it) }
 
 }
@@ -80,7 +81,7 @@ private fun processLoginRequest(data: IntentData, action: LoginRequest) = with(d
 fun LoginFragment.view(actions: BehaviorSubject<LoginAction>, viewState: LoginViewState) = with(viewState) {
     when {
         progressing -> showLoadingView()
-        errorMessage != null -> showErrorView(this)
+        errorMessage != null -> showErrorView(actions, this)
         loginResponse != null -> navigateToNextScreen()
         else -> showInitialView(actions)
     }
@@ -88,14 +89,16 @@ fun LoginFragment.view(actions: BehaviorSubject<LoginAction>, viewState: LoginVi
 
 fun LoginFragment.showInitialView(actions: BehaviorSubject<LoginAction>) {
     login_progress.visibility = View.GONE
-    login_button.setOnClickListener {
-        actions.onNext(
-            LoginRequest(
-                user_name_edit_text.asString(),
-                password_edit_text.asString()
-            )
+    login_button.setOnClickListener { requestLoginOnClick(actions) }
+}
+
+private fun LoginFragment.requestLoginOnClick(actions: BehaviorSubject<LoginAction>) {
+    actions.onNext(
+        LoginRequest(
+            user_name_edit_text.asString(),
+            password_edit_text.asString()
         )
-    }
+    )
 }
 
 private fun LoginFragment.showLoadingView() {
@@ -103,10 +106,12 @@ private fun LoginFragment.showLoadingView() {
     login_button.setOnClickListener { Toast.makeText(context, "please wait", Toast.LENGTH_SHORT).show() }
 }
 
-private fun LoginFragment.showErrorView(loginViewState: LoginViewState) = with(loginViewState) {
-    login_progress.visibility = View.GONE
-    login_button.setOnClickListener { Toast.makeText(context, loginViewState.errorMessage, Toast.LENGTH_LONG).show() }
-}
+private fun LoginFragment.showErrorView(actions: BehaviorSubject<LoginAction>, loginViewState: LoginViewState) =
+    with(loginViewState) {
+        login_progress.visibility = View.GONE
+        Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+        login_button.setOnClickListener { requestLoginOnClick(actions) }
+    }
 
 private fun LoginFragment.navigateToNextScreen() {
     login_progress.visibility = View.GONE
