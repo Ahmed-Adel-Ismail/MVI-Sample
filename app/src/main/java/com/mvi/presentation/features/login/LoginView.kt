@@ -60,11 +60,7 @@ private fun LoginFragment.requestLoginOnClick(actions: BehaviorSubject<LoginActi
 }
 
 private fun LoginFragment.switchProgressAndOnClick(actions: BehaviorSubject<LoginAction>, progressing: Boolean) {
-    when {
-        progressing -> showProgressAndDisableOnClick()
-        else -> hideProgressAndEnableOnClick(actions)
-    }
-
+    if (progressing) showProgressAndDisableOnClick() else hideProgressAndEnableOnClick(actions)
 }
 
 private fun LoginFragment.hideProgressAndEnableOnClick(actions: BehaviorSubject<LoginAction>) {
